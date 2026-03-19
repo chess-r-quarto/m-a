@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>営業運転資本 & CCC シミュレーター</title>
+    <title>月商ベース 運転資本・CCCシミュレーター</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,13 +18,24 @@
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
 
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap');
-        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f1f5f9; }
-        
-        .timeline-container { position: relative; height: 120px; width: 100%; background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; }
-        .cycle-bar { height: 40px; position: absolute; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.75rem; transition: all 0.3s ease; }
-        .connector { position: absolute; border-left: 2px dashed #cbd5e1; height: 100%; top: 0; z-index: 0; }
+        body { font-family: 'Noto Sans JP', sans-serif; background-color: #f3f4f6; }
+        .katex-display { margin: 0.8em 0; overflow-x: auto; }
+        .metric-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #2563eb;
+            cursor: pointer;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
@@ -40,210 +51,211 @@
     </script>
 
     <script type="text/babel" data-presets="tsx">
-        const { useState, useEffect, useMemo } = React;
+        const { useState, useEffect, useRef } = React;
+
+        const TeX = ({ formula, block = false }: { formula: string, block?: boolean }) => {
+            const containerRef = useRef<HTMLDivElement>(null);
+            useEffect(() => {
+                if (containerRef.current) {
+                    try {
+                        katex.render(formula, containerRef.current, {
+                            throwOnError: false,
+                            displayMode: block
+                        });
+                    } catch (e) {
+                        console.error(e);
+                    }
+                }
+            }, [formula, block]);
+            return <div ref={containerRef} className={block ? "my-2" : "inline-block"} />;
+        };
 
         const App = () => {
-            // 基本的なPL項目
+            // States (初期値: 日本の中小企業の典型的なバランスを想定)
             const [annualSales, setAnnualSales] = useState(1200); // 年商 (万円)
-            
-            // BS項目（営業運転資本の構成要素）
-            const [accountsReceivable, setAccountsReceivable] = useState(200); // 売上債権
-            const [inventory, setInventory] = useState(150);                // 棚卸資産
-            const [accountsPayable, setAccountsPayable] = useState(100);    // 仕入債務
+            const [ar, setAr] = useState(200);   // 売上債権 (2ヶ月分想定)
+            const [inv, setInv] = useState(100);  // 棚卸資産 (1ヶ月分想定)
+            const [ap, setAp] = useState(150);   // 仕入債務 (1.5ヶ月分想定)
 
-            // 1日あたりの売上高 (365日換算)
-            const salesPerDay = annualSales / 365;
-
-            // 回転期間の計算 (日数)
-            const arDays = Math.round(accountsReceivable / salesPerDay);
-            const invDays = Math.round(inventory / salesPerDay);
-            const apDays = Math.round(accountsPayable / salesPerDay);
+            // 月換算の計算
+            const monthlySales = annualSales / 12;
+            const arMonths = ar / monthlySales;
+            const invMonths = inv / monthlySales;
+            const apMonths = ap / monthlySales;
             
-            // 営業運転資本額
-            const operatingWorkingCapital = accountsReceivable + inventory - accountsPayable;
-            
-            // CCC (Cash Conversion Cycle) = 回収期間 + 在庫期間 - 支払猶予期間
-            const ccc = arDays + invDays - apDays;
+            // 運転資本（額）と CCC（期間）
+            const owc = ar + inv - ap;
+            const cccMonths = arMonths + invMonths - apMonths;
 
-            const formatMoney = (v: number) => `¥${v.toLocaleString()}万`;
+            const formatYen = (v: number) => `¥${Math.round(v).toLocaleString()}万`;
+            const formatMonth = (v: number) => `${v.toFixed(2)}ヶ月`;
 
             return (
-                <div className="min-h-screen p-4 md:p-8">
-                    <div className="max-w-6xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-200">
+                <div className="min-h-screen p-4 md:p-10">
+                    <div className="max-w-6xl mx-auto space-y-8">
                         
-                        {/* Header */}
-                        <div className="bg-indigo-900 text-white p-8">
-                            <div className="flex items-center gap-3 mb-2">
-                                <div className="p-2 bg-indigo-500 rounded-lg">
-                                    <i data-lucide="refresh-cw" className="w-6 h-6"></i>
+                        {/* Title Section */}
+                        <div className="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
+                            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                                <div>
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 bg-indigo-600 rounded-xl text-white">
+                                            <i data-lucide="bar-chart-big" className="w-7 h-7"></i>
+                                        </div>
+                                        <h1 className="text-3xl font-black text-slate-800 tracking-tight">月商ベース回転期間アナライザー</h1>
+                                    </div>
+                                    <p className="text-slate-500 font-medium">経済産業省「ロカベン」・金融機関評価対応モデル</p>
                                 </div>
-                                <h1 className="text-3xl font-black">営業運転資本 & CCC 図解</h1>
+                                <div className="bg-slate-50 px-6 py-4 rounded-2xl border border-slate-100 text-center min-w-[200px]">
+                                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">CCC (Cash Cycle)</div>
+                                    <div className={`text-4xl font-black ${cccMonths > 3 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                        {formatMonth(cccMonths)}
+                                    </div>
+                                </div>
                             </div>
-                            <p className="text-indigo-200 text-lg">「お金が寝ている期間」を可視化して、キャッシュフローの効率を診断しましょう。</p>
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                             
-                            {/* Inputs Section */}
-                            <div className="lg:col-span-4 bg-slate-50 p-8 border-r border-slate-100">
-                                <h2 className="text-xl font-bold text-slate-800 mb-6 flex items-center gap-2">
-                                    <i data-lucide="settings-2" className="w-5 h-5 text-indigo-600"></i>
-                                    財務数値を設定
-                                </h2>
+                            {/* Input Panel */}
+                            <div className="lg:col-span-4 space-y-6">
+                                <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200 sticky top-10">
+                                    <h2 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
+                                        <i data-lucide="settings" className="w-5 h-5 text-indigo-600"></i>
+                                        財務データ入力
+                                    </h2>
 
-                                <div className="space-y-8">
-                                    {/* 年商 */}
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm">
-                                            <label className="font-bold text-slate-700">年商 (Annual Sales)</label>
-                                            <span className="text-indigo-600 font-bold">{formatMoney(annualSales)}</span>
+                                    <div className="space-y-8">
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between text-sm">
+                                                <label className="font-bold text-slate-600 underline">年間売上高</label>
+                                                <span className="font-mono font-black text-indigo-600">{formatYen(annualSales)}</span>
+                                            </div>
+                                            <input type="range" min="120" max="6000" step="120" value={annualSales} onChange={(e) => setAnnualSales(Number(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer" />
+                                            <div className="flex justify-between items-center bg-indigo-50 p-2 rounded-lg mt-1">
+                                                <span className="text-[10px] font-bold text-indigo-500">平均月商:</span>
+                                                <span className="text-xs font-bold text-indigo-700">{formatYen(monthlySales)}</span>
+                                            </div>
                                         </div>
-                                        <input type="range" min="100" max="5000" step="100" value={annualSales} onChange={(e) => setAnnualSales(Number(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" />
-                                        <p className="text-[10px] text-slate-400">1日あたり: {formatMoney(Math.round(salesPerDay))}</p>
-                                    </div>
 
-                                    {/* 売上債権 */}
-                                    <div className="space-y-3 pt-4 border-t border-slate-200">
-                                        <div className="flex justify-between text-sm">
-                                            <label className="font-bold text-blue-600">売上債権 (AR)</label>
-                                            <span className="font-bold">{formatMoney(accountsReceivable)}</span>
+                                        <div className="space-y-3 pt-6 border-t border-slate-100">
+                                            <div className="flex justify-between text-sm">
+                                                <label className="font-bold text-blue-600">売上債権 (AR)</label>
+                                                <span className="font-mono font-bold">{formatYen(ar)}</span>
+                                            </div>
+                                            <input type="range" min="0" max={monthlySales * 6} step="10" value={ar} onChange={(e) => setAr(Number(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer" />
                                         </div>
-                                        <input type="range" min="0" max="1000" step="10" value={accountsReceivable} onChange={(e) => setAccountsReceivable(Number(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" />
-                                        <div className="flex justify-between text-xs text-blue-500">
-                                            <span>回収待ちのお金</span>
-                                            <span className="font-bold">期間: {arDays}日</span>
-                                        </div>
-                                    </div>
 
-                                    {/* 棚卸資産 */}
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm">
-                                            <label className="font-bold text-orange-600">棚卸資産 (Inventory)</label>
-                                            <span className="font-bold">{formatMoney(inventory)}</span>
+                                        <div className="space-y-3 pt-4">
+                                            <div className="flex justify-between text-sm">
+                                                <label className="font-bold text-orange-500">棚卸資産 (Inventory)</label>
+                                                <span className="font-mono font-bold">{formatYen(inv)}</span>
+                                            </div>
+                                            <input type="range" min="0" max={monthlySales * 6} step="10" value={inv} onChange={(e) => setInv(Number(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer" />
                                         </div>
-                                        <input type="range" min="0" max="1000" step="10" value={inventory} onChange={(e) => setInventory(Number(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-orange-500" />
-                                        <div className="flex justify-between text-xs text-orange-500">
-                                            <span>在庫として眠るお金</span>
-                                            <span className="font-bold">期間: {invDays}日</span>
-                                        </div>
-                                    </div>
 
-                                    {/* 仕入債務 */}
-                                    <div className="space-y-3">
-                                        <div className="flex justify-between text-sm">
-                                            <label className="font-bold text-emerald-600">仕入債務 (AP)</label>
-                                            <span className="font-bold">{formatMoney(accountsPayable)}</span>
-                                        </div>
-                                        <input type="range" min="0" max="1000" step="10" value={accountsPayable} onChange={(e) => setAccountsPayable(Number(e.target.value))} className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-emerald-500" />
-                                        <div className="flex justify-between text-xs text-emerald-500">
-                                            <span>支払いを待ってもらっているお金</span>
-                                            <span className="font-bold">期間: {apDays}日</span>
+                                        <div className="space-y-3 pt-4 pb-4">
+                                            <div className="flex justify-between text-sm">
+                                                <label className="font-bold text-emerald-600">仕入債務 (AP)</label>
+                                                <span className="font-mono font-bold">{formatYen(ap)}</span>
+                                            </div>
+                                            <input type="range" min="0" max={monthlySales * 6} step="10" value={ap} onChange={(e) => setAp(Number(e.target.value))} className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer" />
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Main Visualization Section */}
-                            <div className="lg:col-span-8 p-8 flex flex-col space-y-12">
+                            {/* Analysis Panel */}
+                            <div className="lg:col-span-8 space-y-6">
                                 
-                                {/* Result Summary */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl">
-                                        <div className="text-indigo-600 text-sm font-bold mb-1">営業運転資本 (額)</div>
-                                        <div className="text-4xl font-black text-indigo-900">{formatMoney(operatingWorkingCapital)}</div>
-                                        <p className="text-xs text-indigo-700 mt-2 italic">※AR + 在庫 - AP</p>
+                                {/* Formula Cards */}
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200 metric-card">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-3 h-8 bg-blue-600 rounded-full"></div>
+                                        <h3 className="text-xl font-black text-slate-800">1. 回転期間の算出 (月換算)</h3>
                                     </div>
-                                    <div className={`p-6 rounded-2xl border ${ccc > 90 ? 'bg-rose-50 border-rose-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                                        <div className={`${ccc > 90 ? 'text-rose-600' : 'text-emerald-600'} text-sm font-bold mb-1`}>CCC (現金化サイクル)</div>
-                                        <div className={`text-4xl font-black ${ccc > 90 ? 'text-rose-900' : 'text-emerald-900'}`}>{ccc} <span className="text-xl">日</span></div>
-                                        <p className="text-xs mt-2 font-medium">手元から現金が消えて戻るまでの日数</p>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                        <div className="p-5 bg-blue-50 rounded-3xl border border-blue-100">
+                                            <div className="text-xs font-black text-blue-600 mb-2">売上債権回転期間</div>
+                                            <TeX formula={`\\frac{\\text{${ar}}}{\\text{${monthlySales}}} = ${arMonths.toFixed(2)} \\text{ ヶ月}`} block />
+                                        </div>
+                                        <div className="p-5 bg-orange-50 rounded-3xl border border-orange-100">
+                                            <div className="text-xs font-black text-orange-600 mb-2">棚卸資産回転期間</div>
+                                            <TeX formula={`\\frac{\\text{${inv}}}{\\text{${monthlySales}}} = ${invMonths.toFixed(2)} \\text{ ヶ月}`} block />
+                                        </div>
+                                        <div className="p-5 bg-emerald-50 rounded-3xl border border-emerald-100">
+                                            <div className="text-xs font-black text-emerald-600 mb-2">仕入債務回転期間</div>
+                                            <TeX formula={`\\frac{\\text{${ap}}}{\\text{${monthlySales}}} = ${apMonths.toFixed(2)} \\text{ ヶ月}`} block />
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-900 text-white p-8 rounded-[2rem] relative overflow-hidden">
+                                        <div className="relative z-10">
+                                            <h4 className="text-sm font-black text-slate-400 mb-4 flex items-center gap-2">
+                                                <i data-lucide="info" className="w-4 h-4"></i>
+                                                CCC (Cash Conversion Cycle) の計算式
+                                            </h4>
+                                            <TeX block formula={`\\text{CCC (ヶ月)} = \\text{売上債権回転期間} + \\text{棚卸資産回転期間} - \\text{仕入債務回転期間}`} />
+                                            <div className="flex items-center justify-center gap-4 mt-6 py-4 border-t border-slate-800">
+                                                <span className="text-xl font-medium text-slate-400">{arMonths.toFixed(2)} + {invMonths.toFixed(2)} - {apMonths.toFixed(2)} = </span>
+                                                <span className={`text-4xl font-black ${cccMonths > 3 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                                                    {cccMonths.toFixed(2)} <span className="text-sm font-medium">ヶ月</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {/* Background Decoration */}
+                                        <div className="absolute bottom-0 right-0 w-48 h-48 bg-indigo-500/20 rounded-full blur-3xl -translate-x-10 -translate-y-10"></div>
                                     </div>
                                 </div>
 
-                                {/* Step 1: Component Visualization */}
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                                        <span className="bg-slate-800 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs">1</span>
-                                        営業運転資本の構造
-                                    </h3>
-                                    <div className="relative h-24 flex items-center gap-1 w-full max-w-2xl">
-                                        <div className="h-16 bg-blue-500 flex items-center justify-center rounded-l-lg shadow-sm" style={{ flex: accountsReceivable }}>
-                                            <span className="text-white font-bold text-xs truncate px-1">売上債権</span>
-                                        </div>
-                                        <div className="h-16 bg-orange-500 flex items-center justify-center shadow-sm" style={{ flex: inventory }}>
-                                            <span className="text-white font-bold text-xs truncate px-1">棚卸資産</span>
-                                        </div>
-                                        <div className="h-16 bg-slate-200 border-2 border-dashed border-emerald-400 flex items-center justify-center rounded-r-lg" style={{ flex: accountsPayable }}>
-                                            <span className="text-emerald-700 font-bold text-xs truncate px-1">△ 仕入債務</span>
+                                {/* Benchmarking Section */}
+                                <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-200">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <div className="w-3 h-8 bg-indigo-600 rounded-full"></div>
+                                        <h3 className="text-xl font-black text-slate-800">2. 業界ベンチマーク比較 (経産省ロカベン参照)</h3>
+                                    </div>
+
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="p-6 bg-slate-50 rounded-3xl">
+                                                <p className="text-xs font-black text-slate-400 mb-3 tracking-widest uppercase">運転資金（額）の負担</p>
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-3xl font-black text-slate-800">{formatYen(owc)}</span>
+                                                    <span className="text-slate-400 text-sm font-bold">({(owc / monthlySales).toFixed(1)} ヶ月分)</span>
+                                                </div>
+                                                <p className="text-[10px] text-slate-500 mt-2">※ この金額分だけ、会社は外部から資金を調達して「寝かせておく」必要があります。</p>
+                                            </div>
+                                            <div className="p-6 bg-slate-50 rounded-3xl">
+                                                <p className="text-xs font-black text-slate-400 mb-3 tracking-widest uppercase">資金繰りの健全性</p>
+                                                <div className={`text-xl font-black mb-2 ${cccMonths < 1 ? 'text-emerald-600' : cccMonths < 3 ? 'text-indigo-600' : 'text-rose-600'}`}>
+                                                    {cccMonths < 1 ? '非常に効率的' : cccMonths < 3 ? '標準的' : '要改善レベル'}
+                                                </div>
+                                                <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
+                                                    <div className="bg-emerald-400 h-full" style={{ width: '20%' }}></div>
+                                                    <div className="bg-indigo-400 h-full" style={{ width: '40%' }}></div>
+                                                    <div className="bg-rose-400 h-full" style={{ width: '40%' }}></div>
+                                                </div>
+                                                <div className="flex justify-between text-[8px] font-bold text-slate-400 mt-1">
+                                                    <span>1ヶ月以内 (優良)</span>
+                                                    <span>3ヶ月 (注意)</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="mt-4 text-sm text-slate-500 bg-slate-50 p-4 rounded-lg border border-slate-100 italic">
-                                        「売上債権」と「棚卸資産」は、会社にとって<strong className="text-slate-700 font-bold underline">まだお金になっていない資産</strong>です。
-                                        逆に「仕入債務」は<strong className="text-slate-700 font-bold underline">まだ払わなくていいお金</strong>なので、その差額が「運転資金」として用意すべき金額になります。
+
+                                    <div className="mt-8 p-6 bg-amber-50 rounded-[2rem] border border-amber-100">
+                                        <h4 className="font-black text-amber-800 mb-3 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                            <i data-lucide="lightbulb" className="w-4 h-4"></i>
+                                            月商倍率で見るメリット
+                                        </h4>
+                                        <ul className="text-xs text-amber-900 space-y-2 font-medium opacity-80 leading-relaxed">
+                                            <li>• <strong>「月商の◯ヶ月分」</strong>という表現は、銀行の融資判断（借入限度額など）と直接比較しやすくなります。</li>
+                                            <li>• 経産省のローカルベンチマークでは、売上債権や棚卸資産の回転期間が前年より悪化していないかを確認します。</li>
+                                            <li>• CCCが3ヶ月を超えてくると、売上が急拡大した際に「黒字倒産」のリスクが高まるため注意が必要です。</li>
+                                        </ul>
                                     </div>
                                 </div>
-
-                                {/* Step 2: Cash Conversion Cycle Timeline */}
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-                                        <span className="bg-slate-800 text-white w-6 h-6 flex items-center justify-center rounded-full text-xs">2</span>
-                                        CCC（キャッシュ・コンバージョン・サイクル）の流れ
-                                    </h3>
-                                    
-                                    <div className="relative mt-12 pb-16">
-                                        {/* Timeline Scale */}
-                                        <div className="absolute w-full h-1 bg-slate-100 top-[20px]"></div>
-                                        
-                                        {/* Inventory Days */}
-                                        <div className="absolute top-0 flex flex-col items-center" style={{ left: '0%', width: `${(invDays / (invDays + arDays)) * 70}%` }}>
-                                            <div className="h-10 w-full bg-orange-400 rounded-md flex items-center justify-center text-white text-[10px] font-bold shadow-md">
-                                                在庫期間 {invDays}日
-                                            </div>
-                                            <div className="text-[10px] mt-2 font-bold text-slate-500">仕入〜販売</div>
-                                        </div>
-
-                                        {/* AR Days */}
-                                        <div className="absolute top-0 flex flex-col items-center" style={{ left: `${(invDays / (invDays + arDays)) * 70}%`, width: `${(arDays / (invDays + arDays)) * 70}%` }}>
-                                            <div className="h-10 w-full bg-blue-500 rounded-md flex items-center justify-center text-white text-[10px] font-bold shadow-md ml-1">
-                                                回収期間 {arDays}日
-                                            </div>
-                                            <div className="text-[10px] mt-2 font-bold text-slate-500">販売〜入金</div>
-                                        </div>
-
-                                        {/* AP Days (Offset) */}
-                                        <div className="absolute top-16 flex flex-col items-center" style={{ left: '0%', width: `${(apDays / (invDays + arDays)) * 70}%` }}>
-                                            <div className="h-10 w-full bg-emerald-500 rounded-md flex items-center justify-center text-white text-[10px] font-bold shadow-md">
-                                                支払期間 {apDays}日
-                                            </div>
-                                            <div className="text-[10px] mt-2 font-bold text-slate-500 italic">仕入〜支払</div>
-                                        </div>
-
-                                        {/* CCC Bracket */}
-                                        <div className="absolute top-16 flex flex-col items-center" style={{ 
-                                            left: `${(apDays / (invDays + arDays)) * 70}%`, 
-                                            width: `${((invDays + arDays - apDays) / (invDays + arDays)) * 70}%` 
-                                        }}>
-                                            <div className="h-10 w-full border-2 border-rose-500 border-t-0 rounded-b-lg flex items-center justify-center text-rose-600 text-xs font-black bg-rose-50/50">
-                                                CCC: {ccc}日
-                                            </div>
-                                            <div className="text-[10px] mt-2 font-bold text-rose-600">この期間、現金が足りない！</div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Tips */}
-                                <div className="bg-indigo-900 text-indigo-100 p-6 rounded-2xl">
-                                    <h4 className="font-bold mb-2 flex items-center gap-2">
-                                        <i data-lucide="lightbulb" className="w-4 h-4 text-yellow-400"></i>
-                                        経営改善のアドバイス
-                                    </h4>
-                                    <ul className="text-sm space-y-2 opacity-90">
-                                        <li>• <span className="font-bold underline">在庫(Inventory)を減らす</span>：過剰な在庫を持たないことでCCCは短縮されます。</li>
-                                        <li>• <span className="font-bold underline">回収(AR)を早める</span>：売掛金の回収を早めれば、手元に早く現金が戻ります。</li>
-                                        <li>• <span className="font-bold underline">支払(AP)を遅らせる</span>：仕入先への支払猶予を延ばせば、CCCは改善します。</li>
-                                    </ul>
-                                </div>
-
                             </div>
                         </div>
                     </div>
@@ -257,7 +269,7 @@
         // Initialize Lucide icons
         setTimeout(() => {
             lucide.createIcons();
-        }, 100);
+        }, 200);
     </script>
 </body>
 </html>
